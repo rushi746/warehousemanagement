@@ -1,21 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Warehouse Viewer</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Warehouse</title>
+    <style>
+        body { margin: 0; }
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            z-index: 200;
+        }
+        #addAssetButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        /* Style for disabled button */
+        #addAssetButton:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
 </head>
 <body>
-      <button id="addAssetButton">Add New Coil (Simulate API)</button>
+    <!-- Loading Screen Div -->
+    <div id="loading-screen">
+        <div>Loading 3D Assets...</div>
+    </div>
 
-  <script type="module" src="/src/main.js"></script>
+    <!-- Button, ab by default disabled hai -->
+    <button id="addAssetButton" disabled>Add New Coil</button>
+
+    <script type="module" src="/src/main.js"></script>
 </body>
 </html>
