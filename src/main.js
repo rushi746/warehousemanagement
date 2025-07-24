@@ -24,7 +24,7 @@ const COILS_PER_ROW = 16;
 const SPACING_X = 1.0;       // Coils ke beech left-right gap
 const SPACING_Z = 1.0;       // Rows ke beech aage-peeche gap
 const START_X = -8.0;        // X-axis par kahan se shuru karna hai (Left side)
-const START_Z = 1.0;         // Z-axis par pehli row kahan hogi
+const START_Z = -11.0;         // Z-axis par pehli row kahan hogi
 const FLOOR_Y = 0.01;         // Zameen se height
 
 // --- Scene, Camera, Renderer, etc. (No changes) ---
@@ -49,7 +49,7 @@ controls.update();
 const loader = new GLTFLoader(loadingManager);
 
 // --- Load Models (No changes here) ---
-loader.load('/warehouse2.glb', (gltf) => { scene.add(gltf.scene); });
+loader.load('/warehouse3.glb', (gltf) => { scene.add(gltf.scene); });
 loader.load('/steelcoil.glb', (gltf) => {
     coilModelTemplate = gltf.scene;
     coilModelTemplate.scale.set(0.4, 0.4, 0.4); 
