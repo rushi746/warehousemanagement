@@ -1,17 +1,15 @@
-// main.js (With more robust API Polling and Notification Handling)
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// --- Configuration ---
 const API_URL = 'http://localhost:3000/api'; 
-const POLL_INTERVAL_MS = 5000; // How often to check for new coils (5 seconds)
+const POLL_INTERVAL_MS = 5000; 
 
 // --- Loading Manager ---
 const loadingManager = new THREE.LoadingManager();
 loadingManager.onLoad = () => {
-    console.log("All models loaded successfully! - main.js:14");
+    console.log("All models loaded successfully! - main.js:12");
     
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) {
@@ -74,13 +72,13 @@ const loader = new GLTFLoader(loadingManager);
 // --- Load Models ---
 loader.load('/warehouse3.glb', (gltf) => { 
     scene.add(gltf.scene); 
-    console.log("Warehouse model loaded. - main.js:77");
+    console.log("Warehouse model loaded. - main.js:75");
 });
 
 loader.load('/steelcoil.glb', (gltf) => {
     coilModelTemplate = gltf.scene; 
     coilModelTemplate.scale.set(0.4, 0.4, 0.4); 
-    console.log("Coil model template loaded. - main.js:83");
+    console.log("Coil model template loaded. - main.js:81");
 });
 
 // --- Function to Add a Coil ---
@@ -115,7 +113,7 @@ function simpleAddCoil() {
     scene.add(newCoil);
     
     coilCounter++;
-    console.log(`Added coil #${coilId}. Row: ${row}, Col: ${col}. Position: (${xPosition.toFixed(2)}, ${FLOOR_Y}, ${zPosition.toFixed(2)}) - main.js:118`);
+    console.log(`Added coil #${coilId}. Row: ${row}, Col: ${col}. Position: (${xPosition.toFixed(2)}, ${FLOOR_Y}, ${zPosition.toFixed(2)}) - main.js:116`);
 }
 
 
@@ -127,33 +125,48 @@ async function checkForNewCoil() {
     try {
         const response = await fetch(`${API_URL}/checkForNewCoil`);
         if (!response.ok) {
-            console.error(`API Error: ${response.status} ${response.statusText} - main.js:130`);
+            console.error(`API Error: ${response.status} ${response.statusText} - main.js:128`);
             return false; // Assume no new coil on error, and continue polling
         }
         const data = await response.json();
         return data.newCoil;
     } catch (error) {
-        console.error('Failed to connect to API: - main.js:136', error);
+        console.error('Failed to connect to API: - main.js:134', error);
         return false; // Assume no new coil if API is unreachable, and continue polling
     }
 }
 
 function showCoilRequestPrompt() {
-    if (isNotificationPending) return; // If a notification is already being processed, do nothing
+    if (isNotificationPending) return;
 
-    isNotificationPending = true; // Mark that we are now processing a notification
-    console.log("Showing coil request confirmation prompt. - main.js:145");
+    isNotificationPending = true;
 
-    const userConfirmed = confirm("A new coil request has been made. Do you want to add it?");
+    const dialog = document.getElementById("coilDialog");
+    const acceptBtn = document.getElementById("acceptBtn");
+    const rejectBtn = document.getElementById("rejectBtn");
 
-    if (userConfirmed) {
-        console.log("User accepted new coil request. - main.js:150");
-        simpleAddCoil(); // Add one coil as requested
-    } else {
-        console.log("User rejected new coil request. - main.js:153");
-    }
-    
-    isNotificationPending = false; 
+    dialog.style.display = "block";
+
+    const cleanUp = () => {
+        dialog.style.display = "none";
+        acceptBtn.removeEventListener("click", onAccept);
+        rejectBtn.removeEventListener("click", onReject);
+        isNotificationPending = false;
+    };
+
+    const onAccept = () => {
+        console.log("User accepted new coil request. - main.js:158");
+        simpleAddCoil();
+        cleanUp();
+    };
+
+    const onReject = () => {
+        console.log("User rejected new coil request. - main.js:164");
+        cleanUp();
+    };
+
+    acceptBtn.addEventListener("click", onAccept);
+    rejectBtn.addEventListener("click", onReject);
 }
 
 async function pollAndHandle() {
@@ -167,11 +180,11 @@ async function pollAndHandle() {
 
 function startPollingForNewCoils() {
     if (isPollingActive) {
-        console.log("Polling is already active. - main.js:170");
+        console.log("Polling is already active. - main.js:183");
         return;
     }
     isPollingActive = true;
-    console.log(`Starting to poll for new coils every ${POLL_INTERVAL_MS / 1000} seconds. - main.js:174`);
+    console.log(`Starting to poll for new coils every ${POLL_INTERVAL_MS / 1000} seconds. - main.js:187`);
     
     // Make an immediate check when polling starts
     pollAndHandle(); 
@@ -187,7 +200,7 @@ function stopPollingForNewCoils() {
         clearInterval(pollTimer);
         pollTimer = null;
     }
-    console.log("Polling for new coils has been stopped. - main.js:190");
+    console.log("Polling for new coils has been stopped. - main.js:203");
 }
 
 
