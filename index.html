@@ -3,44 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Warehouse</title>
+    <title>Coil Management</title>
     <style>
-        body { margin: 0; }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
         #loading-screen {
             position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
+            background-color: rgba(0,0,0,0.8);
             color: white;
             display: flex;
             justify-content: center;
             align-items: center;
             font-size: 2em;
-            z-index: 200;
+            z-index: 1000;
         }
-        #addAssetButton {
+        .controls {
             position: absolute;
             top: 10px;
             left: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
             padding: 10px;
-            cursor: pointer;
-            z-index: 100;
+            border-radius: 5px;
+            z-index: 50;
         }
-        /* Style for disabled button */
-        #addAssetButton:disabled {
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
+        .controls input { margin-right: 5px; }
     </style>
 </head>
 <body>
-    <!-- Loading Screen Div -->
-    <div id="loading-screen">
-        <div>Loading 3D Assets...</div>
+    <div id="loading-screen">Loading Assets...</div>
+    
+    <div class="controls">
+        <button id="addAssetButton" disabled>Add Next Coil (Manual)</button>
+        <input type="text" id="searchInput" placeholder="Enter Coil ID">
+        <button id="searchButton" disabled>Search & Highlight</button>
     </div>
-
-    <!-- Button, ab by default disabled hai -->
-    <button id="addAssetButton" disabled>Add New Coil</button>
 
     <script type="module" src="/src/main.js"></script>
 </body>
