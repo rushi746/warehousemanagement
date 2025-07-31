@@ -65,6 +65,42 @@ scene.add(ambientLight);
 const gridHelper = new THREE.GridHelper(20, 20);
 scene.add(gridHelper);
 
+function createWarehouseGrid() {
+  const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+
+  const gridGroup = new THREE.Group();
+
+  // --- Grid dimensions (based on your coil placement)
+  const totalWidth = (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) * BLOCKS_PER_ROW_XZ;
+  const totalDepth = (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) * BLOCKS_PER_ROW_XZ;
+
+  const startX = START_X - 0.4; // small offset so lines don’t clip
+  const startZ = START_Z - 0.4;
+
+  // ✅ Draw vertical lines (columns)
+  for (let i = 0; i <= COILS_PER_BLOCK_ROW * BLOCKS_PER_ROW_XZ; i++) {
+    const points = [];
+    points.push(new THREE.Vector3(startX + i * COIL_SPACING_X, FLOOR_Y + 0.001, startZ));
+    points.push(new THREE.Vector3(startX + i * COIL_SPACING_X, FLOOR_Y + 0.001, startZ + totalDepth));
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const line = new THREE.Line(geometry, lineMaterial);
+    gridGroup.add(line);
+  }
+
+  // ✅ Draw horizontal lines (rows)
+  for (let j = 0; j <= COILS_PER_BLOCK_COLUMN * BLOCKS_PER_ROW_XZ; j++) {
+    const points = [];
+    points.push(new THREE.Vector3(startX, FLOOR_Y + 0.001, startZ + j * COIL_SPACING_Z));
+    points.push(new THREE.Vector3(startX + totalWidth, FLOOR_Y + 0.001, startZ + j * COIL_SPACING_Z));
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const line = new THREE.Line(geometry, lineMaterial);
+    gridGroup.add(line);
+  }
+
+  scene.add(gridGroup);
+}
+
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.update();
@@ -77,14 +113,14 @@ const craneGroup = new THREE.Group();
 scene.add(craneGroup);
 
 loadingManager.onLoad = () => {
-  console.log("All models loaded successfully! - main.js:80");
+  console.log("All models loaded successfully! - main.js:116");
   updateLoadingScreen(false);
   enableActionButtons();
 
   initializeCrane();
 
   setupUIEventListeners(
-    openPlacementPopup,
+    addCoilWithCrane,
     findAndHighlightCoil,
     placeCoilAt
   );
@@ -93,17 +129,17 @@ loadingManager.onLoad = () => {
 };
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-  console.log(`Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files. - main.js:96`);
+  console.log(`Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files. - main.js:132`);
 };
 
 loadingManager.onError = (url) => {
-  console.error(`There was an error loading: ${url} - main.js:100`);
+  console.error(`There was an error loading: ${url} - main.js:136`);
   alertUser(`Error loading ${url}. Please check the console.`);
 };
 
-loader.load("/warehouse3.glb", (gltf) => {
+loader.load("/warehouse5.glb", (gltf) => {
   scene.add(gltf.scene);
-  console.log("Warehouse model loaded. - main.js:106");
+  console.log("Warehouse model loaded. - main.js:142");
   gltf.scene.traverse(function (child) {
     if (child.isMesh) {
       child.receiveShadow = true;
@@ -114,15 +150,8 @@ loader.load("/warehouse3.glb", (gltf) => {
 loader.load("/steelcoil.glb", (gltf) => {
   coilModelTemplate = gltf.scene;
   coilModelTemplate.scale.set(0.4, 0.4, 0.4);
-  console.log("Coil model template loaded. - main.js:117");
+  console.log("Coil model template loaded. - main.js:153");
 });
-
-function openPlacementPopup() {
-  // Show the modal
-  document.querySelector(".placement-controls").style.display = "flex";
-}
-
-
 
 function placeCoilAt(row, column, layer) {
   if (!coilModelTemplate) {
@@ -130,18 +159,23 @@ function placeCoilAt(row, column, layer) {
     return;
   }
 
-  const blockRowXZ = Math.floor(row / COILS_PER_BLOCK_COLUMN);
-  const blockColXZ = Math.floor(column / COILS_PER_BLOCK_ROW);
+  // ✅ shift row/column to 0-based internally
+const rowIndex = row - 1;
+const columnIndex = column - 1;
+const layerIndex = layer - 1;
 
-  const xPosition = START_X +
+const blockRowXZ = Math.floor(rowIndex / COILS_PER_BLOCK_COLUMN);
+const blockColXZ = Math.floor(columnIndex / COILS_PER_BLOCK_ROW);
+
+const xPosition = START_X +
     blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) +
-    (column % COILS_PER_BLOCK_ROW) * COIL_SPACING_X;
+    (columnIndex % COILS_PER_BLOCK_ROW) * COIL_SPACING_X;
 
-  const zPosition = START_Z +
+const zPosition = START_Z +
     blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
-    (row % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
+    (rowIndex % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
 
-  const yPosition = FLOOR_Y + (layer-1) * COIL_HEIGHT_INCREMENT;
+const yPosition = FLOOR_Y + layerIndex * COIL_HEIGHT_INCREMENT;
 
   const newCoil = coilModelTemplate.clone(true);
   newCoil.traverse((child) => {
@@ -238,14 +272,14 @@ async function pollAndHandle() {
   if (hasNewCoil) {
     showCoilRequestPrompt(
       addCoilWithCrane,
-      () => console.log("User chose not to add coil on prompt. - main.js:241")
+      () => console.log("User chose not to add coil on prompt. - main.js:275")
     );
   }
 }
 
 function startPollingForNewCoils() {
   if (isPollingActive) {
-    console.log("Polling is already active. - main.js:248");
+    console.log("Polling is already active. - main.js:282");
     return;
   }
   isPollingActive = true;
@@ -265,7 +299,7 @@ function stopPollingForNewCoils() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  console.log("Polling for new coils has been stopped. - main.js:268");
+  console.log("Polling for new coils has been stopped. - main.js:302");
 }
 
 function moveCameraTo(targetObject) {
@@ -334,7 +368,7 @@ function findAndHighlightCoil() {
 
 function initializeCrane() {
   if (!coilModelTemplate) {
-    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:337");
+    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:371");
     return;
   }
 
@@ -375,7 +409,7 @@ function initializeCrane() {
   wire = new THREE.Line(wireGeometry, wireMaterial);
   craneGroup.add(wire);
 
-  console.log("Crane initialized. - main.js:378");
+  console.log("Crane initialized. - main.js:412");
 }
 
 function updateWire() {
@@ -390,7 +424,7 @@ function updateWire() {
 
 function animateCraneDrop(coil, targetX, targetZ, targetY) {
   if (!hookCarrier || !hook) {
-    console.error("Crane parts not initialized for drop animation. - main.js:393");
+    console.error("Crane parts not initialized for drop animation. - main.js:427");
     return;
   }
 
@@ -409,7 +443,7 @@ function animateCraneDrop(coil, targetX, targetZ, targetY) {
       updateWire();
     },
     onComplete: () => {
-      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:412`);
+      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:446`);
     }
   });
 
@@ -433,13 +467,13 @@ function animate() {
 
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:436");
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:470");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:442");
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:476");
     return;
   }
 
@@ -519,14 +553,11 @@ function setupCraneGUI() {
 
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:522");
+  console.log("Crane GUI setup complete. - main.js:556");
 }
 
 document.getElementById("addAssetButton").disabled = true;
 document.getElementById("searchButton").disabled = true;
-
-
-
 
 updateLoadingScreen(true);
 
