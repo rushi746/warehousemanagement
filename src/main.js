@@ -1,4 +1,3 @@
-
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -15,8 +14,8 @@ import {
 } from "./ui.js";
 import { checkForNewCoil } from "./apiService.js";
 
-const COILS_PER_BLOCK_ROW = 15;
-const COILS_PER_BLOCK_COLUMN = 20;
+const COILS_PER_BLOCK_ROW = 19;
+const COILS_PER_BLOCK_COLUMN = 35;
 const COILS_PER_BLOCK_HEIGHT = 3;
 
 const BLOCKS_PER_ROW_XZ = 4;
@@ -39,45 +38,76 @@ let allCoils = [];
 let pollTimer = null;
 let isPollingActive = false;
 
+// Improved scene setup with better lighting
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x101010);
+scene.background = new THREE.Color(0x333333); // Lighter background
+scene.fog = new THREE.FogExp2(0x333333, 0.002); // Subtle fog for depth
 
+// Enhanced camera setup
 const camera = new THREE.PerspectiveCamera(
-  75,
+  60, // Wider field of view
   window.innerWidth / window.innerHeight,
   0.1,
   1000
 );
-camera.position.set(0, 8, 15);
+camera.position.set(0, 12, 20); // Higher initial position
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ 
+  antialias: true,
+  powerPreference: "high-performance"
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding; // Better color handling
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-directionalLight.position.set(5, 10, 7);
-directionalLight.castShadow = true;
-scene.add(directionalLight);
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+// Enhanced lighting setup
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 
-const gridHelper = new THREE.GridHelper(20, 20);
-scene.add(gridHelper);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+directionalLight.position.set(5, 20, 10);
+directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.width = 2048;
+directionalLight.shadow.mapSize.height = 2048;
+directionalLight.shadow.camera.near = 0.5;
+directionalLight.shadow.camera.far = 50;
+directionalLight.shadow.camera.left = -20;
+directionalLight.shadow.camera.right = 20;
+directionalLight.shadow.camera.top = 20;
+directionalLight.shadow.camera.bottom = -20;
+scene.add(directionalLight);
+
+// Additional fill light
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+fillLight.position.set(-5, 10, -10);
+scene.add(fillLight);
+
+// Back light
+const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+backLight.position.set(0, 5, -15);
+scene.add(backLight);
 
 function createWarehouseGrid() {
-  const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+  const lineMaterial = new THREE.LineBasicMaterial({ 
+    color: 0xaaaaaa, // Softer grid color
+    transparent: true,
+    opacity: 0.6
+  });
 
   const gridGroup = new THREE.Group();
 
-  // --- Grid dimensions (based on your coil placement)
+  // Grid dimensions (based on your coil placement)
   const totalWidth = (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) * BLOCKS_PER_ROW_XZ;
   const totalDepth = (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) * BLOCKS_PER_ROW_XZ;
 
-  const startX = START_X - 0.4; // small offset so lines don’t clip
+  const startX = START_X - 0.4;
   const startZ = START_Z - 0.4;
 
-  // ✅ Draw vertical lines (columns)
+  // Draw vertical lines (columns)
   for (let i = 0; i <= COILS_PER_BLOCK_ROW * BLOCKS_PER_ROW_XZ; i++) {
     const points = [];
     points.push(new THREE.Vector3(startX + i * COIL_SPACING_X, FLOOR_Y + 0.001, startZ));
@@ -87,7 +117,7 @@ function createWarehouseGrid() {
     gridGroup.add(line);
   }
 
-  // ✅ Draw horizontal lines (rows)
+  // Draw horizontal lines (rows)
   for (let j = 0; j <= COILS_PER_BLOCK_COLUMN * BLOCKS_PER_ROW_XZ; j++) {
     const points = [];
     points.push(new THREE.Vector3(startX, FLOOR_Y + 0.001, startZ + j * COIL_SPACING_Z));
@@ -100,9 +130,13 @@ function createWarehouseGrid() {
   scene.add(gridGroup);
 }
 
-
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.screenSpacePanning = false;
+controls.minDistance = 5;
+controls.maxDistance = 50;
+controls.maxPolarAngle = Math.PI * 0.9;
 controls.update();
 
 const loadingManager = new THREE.LoadingManager();
@@ -113,7 +147,7 @@ const craneGroup = new THREE.Group();
 scene.add(craneGroup);
 
 loadingManager.onLoad = () => {
-  console.log("All models loaded successfully! - main.js:116");
+  console.log("All models loaded successfully! - main.js:150");
   updateLoadingScreen(false);
   enableActionButtons();
 
@@ -129,28 +163,67 @@ loadingManager.onLoad = () => {
 };
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-  console.log(`Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files. - main.js:132`);
+  console.log(`Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files. - main.js:166`);
 };
 
 loadingManager.onError = (url) => {
-  console.error(`There was an error loading: ${url} - main.js:136`);
+  console.error(`There was an error loading: ${url} - main.js:170`);
   alertUser(`Error loading ${url}. Please check the console.`);
 };
 
-loader.load("/warehouse5.glb", (gltf) => {
-  scene.add(gltf.scene);
-  console.log("Warehouse model loaded. - main.js:142");
+// Improved GLB loading with material enhancements
+loader.load("/warehouse4.glb", (gltf) => {
   gltf.scene.traverse(function (child) {
     if (child.isMesh) {
+      child.castShadow = true;
       child.receiveShadow = true;
+      
+      // Enhance materials for better appearance
+      if (child.material) {
+        child.material = child.material.clone();
+        child.material.roughness = 0.7;
+        child.material.metalness = 0.1;
+        
+        // Make colors more vibrant
+        if (child.material.color) {
+          child.material.color.convertSRGBToLinear();
+        }
+        
+        // Handle emissive materials
+        if (child.material.emissive) {
+          child.material.emissiveIntensity = 0.5;
+        }
+      }
     }
   });
+  
+  scene.add(gltf.scene);
+  console.log("Warehouse model loaded with enhanced materials. - main.js:201");
+  createSingleBlockSlots();
 });
 
 loader.load("/steelcoil.glb", (gltf) => {
   coilModelTemplate = gltf.scene;
   coilModelTemplate.scale.set(0.4, 0.4, 0.4);
-  console.log("Coil model template loaded. - main.js:153");
+  
+  // Enhance coil materials
+  coilModelTemplate.traverse((child) => {
+    if (child.isMesh && child.material) {
+      child.material = child.material.clone();
+      child.material.roughness = 0.5;
+      child.material.metalness = 0.8; // More metallic for steel coils
+      child.material.envMapIntensity = 0.5;
+      
+      if (child.material.color) {
+        child.material.color.convertSRGBToLinear();
+      }
+      
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+  
+  console.log("Coil model template loaded with enhanced materials. - main.js:226");
 });
 
 function placeCoilAt(row, column, layer) {
@@ -159,32 +232,36 @@ function placeCoilAt(row, column, layer) {
     return;
   }
 
-  // ✅ shift row/column to 0-based internally
-const rowIndex = row - 1;
-const columnIndex = column - 1;
-const layerIndex = layer - 1;
+  const rowIndex = row - 1;
+  const columnIndex = column - 1;
+  const layerIndex = layer - 1;
 
-const blockRowXZ = Math.floor(rowIndex / COILS_PER_BLOCK_COLUMN);
-const blockColXZ = Math.floor(columnIndex / COILS_PER_BLOCK_ROW);
+  const blockRowXZ = Math.floor(rowIndex / COILS_PER_BLOCK_COLUMN);
+  const blockColXZ = Math.floor(columnIndex / COILS_PER_BLOCK_ROW);
 
-const xPosition = START_X +
-    blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) +
-    (columnIndex % COILS_PER_BLOCK_ROW) * COIL_SPACING_X;
+  const xPosition = START_X +
+      blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) +
+      (columnIndex % COILS_PER_BLOCK_ROW) * COIL_SPACING_X;
 
-const zPosition = START_Z +
-    blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
-    (rowIndex % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
+  const zPosition = START_Z +
+      blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
+      (rowIndex % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
 
-const yPosition = FLOOR_Y + layerIndex * COIL_HEIGHT_INCREMENT;
+  const yPosition = FLOOR_Y + layerIndex * COIL_HEIGHT_INCREMENT;
 
   const newCoil = coilModelTemplate.clone(true);
   newCoil.traverse((child) => {
     if (child.isMesh && child.material) {
       child.material = child.material.clone();
+      child.material.roughness = 0.5;
+      child.material.metalness = 0.8;
+      
       if (child.material.emissive === undefined && child.material.color) {
         child.material.emissive = new THREE.Color(0x000000);
       }
+      
       child.castShadow = true;
+      child.receiveShadow = true;
     }
   });
 
@@ -243,10 +320,15 @@ function addCoilWithCrane() {
   newCoil.traverse((child) => {
     if (child.isMesh && child.material) {
       child.material = child.material.clone();
+      child.material.roughness = 0.5;
+      child.material.metalness = 0.8;
+      
       if (child.material.emissive === undefined && child.material.color) {
         child.material.emissive = new THREE.Color(0x000000);
       }
+      
       child.castShadow = true;
+      child.receiveShadow = true;
     }
   });
 
@@ -272,14 +354,14 @@ async function pollAndHandle() {
   if (hasNewCoil) {
     showCoilRequestPrompt(
       addCoilWithCrane,
-      () => console.log("User chose not to add coil on prompt. - main.js:275")
+      () => console.log("User chose not to add coil on prompt. - main.js:357")
     );
   }
 }
 
 function startPollingForNewCoils() {
   if (isPollingActive) {
-    console.log("Polling is already active. - main.js:282");
+    console.log("Polling is already active. - main.js:364");
     return;
   }
   isPollingActive = true;
@@ -299,7 +381,7 @@ function stopPollingForNewCoils() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  console.log("Polling for new coils has been stopped. - main.js:302");
+  console.log("Polling for new coils has been stopped. - main.js:384");
 }
 
 function moveCameraTo(targetObject) {
@@ -368,29 +450,50 @@ function findAndHighlightCoil() {
 
 function initializeCrane() {
   if (!coilModelTemplate) {
-    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:371");
+    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:453");
     return;
   }
 
+  // Improved crane materials
+  const boomMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0099ff,
+    roughness: 0.3,
+    metalness: 0.7
+  });
+  
   const boom = new THREE.Mesh(
     new THREE.BoxGeometry(10, 0.1, 0.1),
-    new THREE.MeshStandardMaterial({ color: 0x0099ff })
+    boomMaterial
   );
   boom.position.set(0, CRANE_HEIGHT + 6, 0);
   boom.castShadow = true;
+  boom.receiveShadow = true;
   craneGroup.add(boom);
 
+  const carrierMaterial = new THREE.MeshStandardMaterial({
+    color: 0xff3300,
+    roughness: 0.4,
+    metalness: 0.6
+  });
+  
   hookCarrier = new THREE.Mesh(
     new THREE.BoxGeometry(1, 0.4, 0.2),
-    new THREE.MeshStandardMaterial({ color: 0xff0000 })
+    carrierMaterial
   );
   hookCarrier.position.set(5, CRANE_HEIGHT + 6, 0);
   hookCarrier.castShadow = true;
+  hookCarrier.receiveShadow = true;
   craneGroup.add(hookCarrier);
 
+  const hookMaterial = new THREE.MeshStandardMaterial({
+    color: 0x222222,
+    roughness: 0.1,
+    metalness: 0.9
+  });
+  
   hook = new THREE.Mesh(
     new THREE.BoxGeometry(0.4, 0.4, 0.4),
-    new THREE.MeshStandardMaterial({ color: 0x000000 })
+    hookMaterial
   );
   const ropeHeight = 0.2;
   hook.position.set(
@@ -399,9 +502,13 @@ function initializeCrane() {
     hookCarrier.position.z
   );
   hook.castShadow = true;
+  hook.receiveShadow = true;
   craneGroup.add(hook);
 
-  const wireMaterial = new THREE.LineBasicMaterial({ color: "#e7e7dcff" });
+  const wireMaterial = new THREE.LineBasicMaterial({ 
+    color: 0xdddddd,
+    linewidth: 2
+  });
   const wireGeometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(hookCarrier.position.x, hookCarrier.position.y, hookCarrier.position.z),
     new THREE.Vector3(hook.position.x, hook.position.y, hook.position.z),
@@ -409,7 +516,7 @@ function initializeCrane() {
   wire = new THREE.Line(wireGeometry, wireMaterial);
   craneGroup.add(wire);
 
-  console.log("Crane initialized. - main.js:412");
+  console.log("Crane initialized with enhanced materials. - main.js:519");
 }
 
 function updateWire() {
@@ -424,7 +531,7 @@ function updateWire() {
 
 function animateCraneDrop(coil, targetX, targetZ, targetY) {
   if (!hookCarrier || !hook) {
-    console.error("Crane parts not initialized for drop animation. - main.js:427");
+    console.error("Crane parts not initialized for drop animation. - main.js:534");
     return;
   }
 
@@ -443,7 +550,7 @@ function animateCraneDrop(coil, targetX, targetZ, targetY) {
       updateWire();
     },
     onComplete: () => {
-      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:446`);
+      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:553`);
     }
   });
 
@@ -456,24 +563,68 @@ function animateCraneDrop(coil, targetX, targetZ, targetY) {
   });
 }
 
+function createSingleBlockSlots() {
+  const slotGroup = new THREE.Group();
+
+  const slotWidth = COIL_SPACING_X;
+  const slotDepth = COIL_SPACING_Z;
+
+  const slotMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    opacity: 0.05,  // very light fill
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+
+  for (let row = 0; row < COILS_PER_BLOCK_COLUMN; row++) {
+    for (let col = 0; col < COILS_PER_BLOCK_ROW; col++) {
+
+      // ✅ Calculate position for each slot
+      const xPos = START_X + col * COIL_SPACING_X;
+      const zPos = START_Z + row * COIL_SPACING_Z;
+
+      // ✅ Create flat plane for slot
+      const slot = new THREE.Mesh(
+        new THREE.PlaneGeometry(slotWidth, slotDepth),
+        slotMaterial
+      );
+      slot.rotation.x = -Math.PI / 2;   // make it flat
+      slot.position.set(xPos, FLOOR_Y + 0.001, zPos);
+      slotGroup.add(slot);
+
+      // ✅ Add white border using EdgesGeometry
+      const edges = new THREE.EdgesGeometry(slot.geometry);
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+      const border = new THREE.LineSegments(edges, lineMaterial);
+      slot.add(border);
+    }
+  }
+
+  scene.add(slotGroup);
+}
+
+
 function animate() {
   requestAnimationFrame(animate);
+  
+  // Optional: Add subtle animation to lights for more dynamic feel
+  const time = Date.now() * 0.0005;
+  directionalLight.position.x = Math.sin(time * 0.7) * 5 + 5;
+  directionalLight.position.z = Math.cos(time * 0.3) * 5 + 10;
+  
   controls.update();
   renderer.render(scene, camera);
 }
 
-
-
-
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:470");
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:621");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:476");
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:627");
     return;
   }
 
@@ -553,8 +704,17 @@ function setupCraneGUI() {
 
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:556");
+  console.log("Crane GUI setup complete. - main.js:707");
 }
+
+// Handle window resize
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.addEventListener('resize', onWindowResize);
 
 document.getElementById("addAssetButton").disabled = true;
 document.getElementById("searchButton").disabled = true;
