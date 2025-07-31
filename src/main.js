@@ -1,4 +1,4 @@
-// main.js
+
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -84,7 +84,7 @@ loadingManager.onLoad = () => {
   initializeCrane();
 
   setupUIEventListeners(
-    addCoilWithCrane,
+    openPlacementPopup,
     findAndHighlightCoil,
     placeCoilAt
   );
@@ -117,6 +117,13 @@ loader.load("/steelcoil.glb", (gltf) => {
   console.log("Coil model template loaded. - main.js:117");
 });
 
+function openPlacementPopup() {
+  // Show the modal
+  document.querySelector(".placement-controls").style.display = "flex";
+}
+
+
+
 function placeCoilAt(row, column, layer) {
   if (!coilModelTemplate) {
     alertUser("Coil model template is not loaded yet. Please wait.");
@@ -134,7 +141,7 @@ function placeCoilAt(row, column, layer) {
     blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
     (row % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
 
-  const yPosition = FLOOR_Y + layer * COIL_HEIGHT_INCREMENT;
+  const yPosition = FLOOR_Y + (layer-1) * COIL_HEIGHT_INCREMENT;
 
   const newCoil = coilModelTemplate.clone(true);
   newCoil.traverse((child) => {
@@ -231,14 +238,14 @@ async function pollAndHandle() {
   if (hasNewCoil) {
     showCoilRequestPrompt(
       addCoilWithCrane,
-      () => console.log("User chose not to add coil on prompt. - main.js:234")
+      () => console.log("User chose not to add coil on prompt. - main.js:241")
     );
   }
 }
 
 function startPollingForNewCoils() {
   if (isPollingActive) {
-    console.log("Polling is already active. - main.js:241");
+    console.log("Polling is already active. - main.js:248");
     return;
   }
   isPollingActive = true;
@@ -258,7 +265,7 @@ function stopPollingForNewCoils() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  console.log("Polling for new coils has been stopped. - main.js:261");
+  console.log("Polling for new coils has been stopped. - main.js:268");
 }
 
 function moveCameraTo(targetObject) {
@@ -327,7 +334,7 @@ function findAndHighlightCoil() {
 
 function initializeCrane() {
   if (!coilModelTemplate) {
-    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:330");
+    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:337");
     return;
   }
 
@@ -368,7 +375,7 @@ function initializeCrane() {
   wire = new THREE.Line(wireGeometry, wireMaterial);
   craneGroup.add(wire);
 
-  console.log("Crane initialized. - main.js:371");
+  console.log("Crane initialized. - main.js:378");
 }
 
 function updateWire() {
@@ -383,33 +390,29 @@ function updateWire() {
 
 function animateCraneDrop(coil, targetX, targetZ, targetY) {
   if (!hookCarrier || !hook) {
-    console.error("Crane parts not initialized for drop animation. - main.js:386");
+    console.error("Crane parts not initialized for drop animation. - main.js:393");
     return;
   }
 
-  // 🎯 1. Instantly position hook above target (no sideways movement)
   hookCarrier.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
   hook.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
   updateWire();
 
-  // 🎯 2. Start the coil up high above the target
   coil.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
 
-  // 🎯 3. Slowly lower the coil (like a crane pulling it down)
   gsap.to(coil.position, {
     y: targetY,
-    duration: 4,         // ⏳ longer duration = slow motion
-    ease: "power1.inOut", // smooth start & stop, no bounce
+    duration: 4,       
+    ease: "power1.inOut", 
     onUpdate: () => {
-      hook.position.y = coil.position.y + 0.3; // keeps hook connected
+      hook.position.y = coil.position.y + 0.3; 
       updateWire();
     },
     onComplete: () => {
-      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:408`);
+      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:412`);
     }
   });
 
-  // 🎯 4. Optional: hook moves back up after lowering
   gsap.to(hook.position, {
     y: CRANE_HEIGHT + 6,
     duration: 2,
@@ -425,15 +428,18 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+
+
+
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:430");
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:436");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:436");
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:442");
     return;
   }
 
@@ -513,11 +519,14 @@ function setupCraneGUI() {
 
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:516");
+  console.log("Crane GUI setup complete. - main.js:522");
 }
 
 document.getElementById("addAssetButton").disabled = true;
 document.getElementById("searchButton").disabled = true;
+
+
+
 
 updateLoadingScreen(true);
 

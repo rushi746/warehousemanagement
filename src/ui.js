@@ -1,4 +1,4 @@
-// ui.js
+
 import gsap from "gsap";
 import * as THREE from "three";
 
@@ -7,17 +7,18 @@ let currentlyBlinkingCoil = null;
 let blinkingInterval = null;
 
 export function setupUIEventListeners(
-  addCoilWithCrane,
+  openPlacementPopup,        
   findAndHighlightCoil,
   placeCoilAtCallback
 ) {
   const addAssetButton = document.getElementById("addAssetButton");
   if (addAssetButton) {
     addAssetButton.addEventListener("click", () => {
-      addCoilWithCrane();
+      // ✅ Instead of adding coil immediately, show the popup
+      document.querySelector(".placement-controls").style.display = "flex";
     });
   } else {
-    console.warn("addAssetButton not found. - ui.js:20");
+    console.warn("addAssetButton not found. - ui.js:21");
   }
 
   const searchButton = document.getElementById("searchButton");
@@ -26,7 +27,7 @@ export function setupUIEventListeners(
       findAndHighlightCoil();
     });
   } else {
-    console.warn("searchButton not found. - ui.js:29");
+    console.warn("searchButton not found. - ui.js:30");
   }
 
   const manualPlaceButton = document.getElementById("manualPlaceButton");
@@ -37,24 +38,30 @@ export function setupUIEventListeners(
       const layer = parseInt(document.getElementById("layerInput").value);
 
       if (isNaN(row) || isNaN(column) || isNaN(layer)) {
-        alert("Please enter valid numbers for row, column, and layer.");
+        alert("⚠️ Please enter valid numbers for row, column, and layer.");
         return;
       }
+
+      // ✅ Place coil now
       placeCoilAtCallback(row, column, layer);
+
+      // ✅ Hide popup after placing coil
+      document.querySelector(".placement-controls").style.display = "none";
     });
   } else {
-    console.warn("manualPlaceButton not found. - ui.js:46");
+    console.warn("manualPlaceButton not found. - ui.js:52");
   }
 
-  console.log("UI event listeners set up. - ui.js:49");
+  console.log("✅ UI event listeners set up (with popup flow). - ui.js:55");
 }
+
 
 export function updateLoadingScreen(visible) {
   const loadingScreen = document.getElementById("loading-screen");
   if (loadingScreen) {
     loadingScreen.style.display = visible ? "flex" : "none";
   } else {
-    console.warn("loadingscreen element not found. - ui.js:57");
+    console.warn("loadingscreen element not found. - ui.js:64");
   }
 }
 
@@ -73,7 +80,7 @@ export function showCoilRequestPrompt(onAccept, onReject) {
   const rejectBtn = document.getElementById("rejectBtn");
 
   if (!dialog || !acceptBtn || !rejectBtn) {
-    console.error("Could not find DOM elements for coil dialog. - ui.js:76");
+    console.error("Could not find DOM elements for coil dialog. - ui.js:83");
     isNotificationPending = false;
     return;
   }
@@ -88,13 +95,13 @@ export function showCoilRequestPrompt(onAccept, onReject) {
   };
 
   const onAcceptHandler = () => {
-    console.log("User accepted new coil request. - ui.js:91");
+    console.log("User accepted new coil request. - ui.js:98");
     onAccept();
     cleanUp();
   };
 
   const onRejectHandler = () => {
-    console.log("User rejected new coil request. - ui.js:97");
+    console.log("User rejected new coil request. - ui.js:104");
     onReject();
     cleanUp();
   };
