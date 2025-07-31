@@ -1,43 +1,44 @@
+// main.js
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import gsap from "gsap";
 
-const API_URL = "http://localhost:3000/api";
-const POLL_INTERVAL_MS = 5000;
+import {
+  setupUIEventListeners,
+  updateLoadingScreen,
+  enableActionButtons,
+  showCoilRequestPrompt,
+  startBlinking,
+  stopBlinking,
+  alertUser,
+} from "./ui.js";
+import { checkForNewCoil } from "./apiService.js";
 
-// --- Coil Placement Constants ---
-const COILS_PER_BLOCK_ROW = 2; // Coils along the X-axis within a block
-const COILS_PER_BLOCK_COLUMN = 5; // Coils along the Z-axis within a block
-const COILS_PER_BLOCK_HEIGHT = 3; // Coils stacked vertically within a block
+const COILS_PER_BLOCK_ROW = 15;
+const COILS_PER_BLOCK_COLUMN = 20;
+const COILS_PER_BLOCK_HEIGHT = 3;
 
-// Arrangement of blocks in the XZ plane
-const BLOCKS_PER_ROW_XZ = 4; // How many blocks to place side-by-side horizontally
+const BLOCKS_PER_ROW_XZ = 4;
 
-// Spacing
-const COIL_SPACING_X = 0.8; // Spacing between coils within a block (along X)
-const COIL_SPACING_Z = 0.8; // Spacing between coils within a block (along Z)
-const COIL_HEIGHT_INCREMENT = 0.5; // Vertical space each coil occupies
+const COIL_SPACING_X = 0.8;
+const COIL_SPACING_Z = 0.8;
+const COIL_HEIGHT_INCREMENT = 0.5;
 
-const BLOCK_SPACING_X = 2.5; // Spacing between the 3 blocks placed horizontally
-const BLOCK_SPACING_Z = 1.0; // Spacing between rows of blocks in the Z direction
+const BLOCK_SPACING_X = 2.5;
+const BLOCK_SPACING_Z = 1.0;
 
 const START_X = -7.2;
 const START_Z = -13.0;
-const FLOOR_Y = 0.01;
-const CRANE_HEIGHT = -2; // Crane's base height, affects the overall vertical positioning of crane components.
+const FLOOR_Y = 0.0;
+const CRANE_HEIGHT = -2;
 
 let coilModelTemplate = null;
-let totalCoilCount = 0; // Tracks the total number of coils added to the scene
+let totalCoilCount = 0;
 let allCoils = [];
-let blinkingInterval = null;
-let currentlyBlinkingCoil = null;
-
-let isPollingActive = false;
-let isNotificationPending = false;
 let pollTimer = null;
+let isPollingActive = false;
 
-// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101010);
 
@@ -71,35 +72,38 @@ controls.update();
 const loadingManager = new THREE.LoadingManager();
 const loader = new GLTFLoader(loadingManager);
 
+let hookCarrier, hook, wire;
+const craneGroup = new THREE.Group();
+scene.add(craneGroup);
+
 loadingManager.onLoad = () => {
-  console.log("All models loaded successfully! - main.js:75");
+  console.log("All models loaded successfully! - main.js:80");
+  updateLoadingScreen(false);
+  enableActionButtons();
 
-  const loadingScreen = document.getElementById("loading-screen");
-  if (loadingScreen) {
-    loadingScreen.style.display = "none";
-  }
+  initializeCrane();
 
-  document.getElementById("addAssetButton").disabled = false;
-  document.getElementById("searchButton").disabled = false;
+  setupUIEventListeners(
+    addCoilWithCrane,
+    findAndHighlightCoil,
+    placeCoilAt
+  );
 
   startPollingForNewCoils();
-  initializeCrane();
-  setupCraneGUI();
 };
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-  console.log(
-    `Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files.`
-  );
+  console.log(`Loading file: ${url}\nLoaded ${itemsLoaded} of ${itemsTotal} files. - main.js:96`);
 };
 
 loadingManager.onError = (url) => {
-  console.error(`There was an error loading: ${url} - main.js:97`);
+  console.error(`There was an error loading: ${url} - main.js:100`);
+  alertUser(`Error loading ${url}. Please check the console.`);
 };
 
 loader.load("/warehouse3.glb", (gltf) => {
   scene.add(gltf.scene);
-  console.log("Warehouse model loaded. - main.js:102");
+  console.log("Warehouse model loaded. - main.js:106");
   gltf.scene.traverse(function (child) {
     if (child.isMesh) {
       child.receiveShadow = true;
@@ -110,12 +114,55 @@ loader.load("/warehouse3.glb", (gltf) => {
 loader.load("/steelcoil.glb", (gltf) => {
   coilModelTemplate = gltf.scene;
   coilModelTemplate.scale.set(0.4, 0.4, 0.4);
-  console.log("Coil model template loaded. - main.js:113");
+  console.log("Coil model template loaded. - main.js:117");
 });
+
+function placeCoilAt(row, column, layer) {
+  if (!coilModelTemplate) {
+    alertUser("Coil model template is not loaded yet. Please wait.");
+    return;
+  }
+
+  const blockRowXZ = Math.floor(row / COILS_PER_BLOCK_COLUMN);
+  const blockColXZ = Math.floor(column / COILS_PER_BLOCK_ROW);
+
+  const xPosition = START_X +
+    blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) +
+    (column % COILS_PER_BLOCK_ROW) * COIL_SPACING_X;
+
+  const zPosition = START_Z +
+    blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
+    (row % COILS_PER_BLOCK_COLUMN) * COIL_SPACING_Z;
+
+  const yPosition = FLOOR_Y + layer * COIL_HEIGHT_INCREMENT;
+
+  const newCoil = coilModelTemplate.clone(true);
+  newCoil.traverse((child) => {
+    if (child.isMesh && child.material) {
+      child.material = child.material.clone();
+      if (child.material.emissive === undefined && child.material.color) {
+        child.material.emissive = new THREE.Color(0x000000);
+      }
+      child.castShadow = true;
+    }
+  });
+
+  newCoil.userData.id = totalCoilCount + 1;
+  allCoils.push(newCoil);
+  scene.add(newCoil);
+
+  animateCraneDrop(newCoil, xPosition, zPosition, yPosition);
+
+  totalCoilCount++;
+
+  console.log(
+    `✅ Coil #${newCoil.userData.id} placed at Row: ${row}, Column: ${column}, Layer: ${layer}`
+  );
+}
 
 function addCoilWithCrane() {
   if (!coilModelTemplate) {
-    alert("Coil model template is not loaded yet. Please wait.");
+    alertUser("Coil model template is not loaded yet. Please wait.");
     return;
   }
 
@@ -141,13 +188,13 @@ function addCoilWithCrane() {
 
   const xPosition =
     START_X +
-    blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) + // Spacing for blocks in X
-    coilColInBlock * COIL_SPACING_X; // Spacing for coils within block
+    blockColXZ * (COILS_PER_BLOCK_ROW * COIL_SPACING_X + BLOCK_SPACING_X) +
+    coilColInBlock * COIL_SPACING_X;
 
   const zPosition =
     START_Z +
-    blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) + // Spacing for blocks in Z
-    coilRowInBlock * COIL_SPACING_Z; // Spacing for coils within block
+    blockRowXZ * (COILS_PER_BLOCK_COLUMN * COIL_SPACING_Z + BLOCK_SPACING_Z) +
+    coilRowInBlock * COIL_SPACING_Z;
 
   const yPosition = FLOOR_Y + coilLayerInBlock * COIL_HEIGHT_INCREMENT;
 
@@ -162,7 +209,7 @@ function addCoilWithCrane() {
     }
   });
 
-  newCoil.userData.id = totalCoilCount + 1; // Use totalCoilCount for unique IDs
+  newCoil.userData.id = totalCoilCount + 1;
   allCoils.push(newCoil);
   scene.add(newCoil);
 
@@ -177,88 +224,31 @@ function addCoilWithCrane() {
   );
 }
 
-async function checkForNewCoil() {
-  if (!isPollingActive) return false;
-
-  try {
-    const response = await fetch(`${API_URL}/checkForNewCoil`);
-    if (!response.ok) {
-      console.error(
-        `API Error: ${response.status} ${response.statusText}`
-      );
-      return false;
-    }
-    const data = await response.json();
-    return data.newCoil;
-  } catch (error) {
-    console.error("Failed to connect to API: - main.js:194", error);
-    return false;
-  }
-}
-
-function showCoilRequestPrompt() {
-  if (isNotificationPending) return;
-
-  isNotificationPending = true;
-
-  const dialog = document.getElementById("coilDialog");
-  const acceptBtn = document.getElementById("acceptBtn");
-  const rejectBtn = document.getElementById("rejectBtn");
-
-  if (!dialog || !acceptBtn || !rejectBtn) {
-    console.error("Could not find DOM elements for coil dialog. - main.js:209");
-    isNotificationPending = false;
-    return;
-  }
-
-  dialog.style.display = "block";
-
-  const cleanUp = () => {
-    dialog.style.display = "none";
-    acceptBtn.removeEventListener("click", onAccept);
-    rejectBtn.removeEventListener("click", onReject);
-    isNotificationPending = false;
-  };
-
-  const onAccept = () => {
-    console.log("User accepted new coil request. - main.js:224");
-    addCoilWithCrane();
-    cleanUp();
-  };
-
-  const onReject = () => {
-    console.log("User rejected new coil request. - main.js:230");
-    cleanUp();
-  };
-
-  acceptBtn.addEventListener("click", onAccept);
-  rejectBtn.addEventListener("click", onReject);
-}
-
 async function pollAndHandle() {
   if (!isPollingActive) return;
 
   const hasNewCoil = await checkForNewCoil();
   if (hasNewCoil) {
-    showCoilRequestPrompt();
+    showCoilRequestPrompt(
+      addCoilWithCrane,
+      () => console.log("User chose not to add coil on prompt. - main.js:234")
+    );
   }
 }
 
 function startPollingForNewCoils() {
   if (isPollingActive) {
-    console.log("Polling is already active. - main.js:249");
+    console.log("Polling is already active. - main.js:241");
     return;
   }
   isPollingActive = true;
+  const pollIntervalSeconds = 5;
   console.log(
-    `Starting to poll for new coils every ${
-      POLL_INTERVAL_MS / 1000
-    } seconds.`
+    `Starting to poll for new coils every ${pollIntervalSeconds} seconds.`
   );
 
   pollAndHandle();
-
-  pollTimer = setInterval(pollAndHandle, POLL_INTERVAL_MS);
+  pollTimer = setInterval(pollAndHandle, 5000);
 }
 
 function stopPollingForNewCoils() {
@@ -268,48 +258,7 @@ function stopPollingForNewCoils() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  console.log("Polling for new coils has been stopped. - main.js:271");
-}
-
-function stopBlinking() {
-  if (blinkingInterval) {
-    clearInterval(blinkingInterval);
-    blinkingInterval = null;
-  }
-  if (currentlyBlinkingCoil) {
-    currentlyBlinkingCoil.traverse((child) => {
-      if (child.isMesh && child.material) {
-        if (child.material.emissive !== undefined) {
-          child.material.emissive.set(0x000000);
-        }
-      }
-    });
-    currentlyBlinkingCoil = null;
-  }
-}
-
-function startBlinking(coil) {
-  let isEmissive = false;
-  currentlyBlinkingCoil = coil;
-
-  coil.traverse((child) => {
-    if (child.isMesh && child.material) {
-      if (child.material.emissive !== undefined) {
-        child.material.emissive.set(0xffff00);
-      }
-    }
-  });
-
-  blinkingInterval = setInterval(() => {
-    isEmissive = !isEmissive;
-    coil.traverse((child) => {
-      if (child.isMesh && child.material) {
-        if (child.material.emissive !== undefined) {
-          child.material.emissive.set(isEmissive ? 0xffff00 : 0x000000);
-        }
-      }
-    });
-  }, 300);
+  console.log("Polling for new coils has been stopped. - main.js:261");
 }
 
 function moveCameraTo(targetObject) {
@@ -354,10 +303,15 @@ function findAndHighlightCoil() {
   stopBlinking();
 
   const searchInput = document.getElementById("searchInput");
+  if (!searchInput) {
+    alertUser("Search input field not found.");
+    return;
+  }
+
   const idToFind = parseInt(searchInput.value);
 
   if (isNaN(idToFind)) {
-    alert("Please enter a valid Coil ID (a number).");
+    alertUser("Please enter a valid Coil ID (a number).");
     return;
   }
 
@@ -367,92 +321,60 @@ function findAndHighlightCoil() {
     startBlinking(foundCoil);
     moveCameraTo(foundCoil);
   } else {
-    alert(`Coil with ID ${idToFind} not found.`);
+    alertUser(`Coil with ID ${idToFind} not found.`);
   }
 }
-
-document.getElementById("addAssetButton")?.addEventListener("click", () => {
-  addCoilWithCrane();
-});
-
-document.getElementById("searchButton")?.addEventListener("click", () => {
-  findAndHighlightCoil();
-});
-
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
-}
-
-let hookCarrier, hook, wire;
-const craneGroup = new THREE.Group();
-scene.add(craneGroup);
 
 function initializeCrane() {
   if (!coilModelTemplate) {
-    console.error(
-      "Crane cannot be initialized: Coil model not loaded yet."
-    );
+    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:330");
     return;
   }
 
-  // Boom of the crane
   const boom = new THREE.Mesh(
-    new THREE.BoxGeometry(10, 0.1, 0.1), // Length, Width, Height of the boom
+    new THREE.BoxGeometry(10, 0.1, 0.1),
     new THREE.MeshStandardMaterial({ color: 0x0099ff })
   );
-  boom.position.set(0, CRANE_HEIGHT + 6, 0); // X, Y, Z position of the boom's pivot point
+  boom.position.set(0, CRANE_HEIGHT + 6, 0);
   boom.castShadow = true;
   craneGroup.add(boom);
 
-  // Hook carrier - the part that moves along the boom
   hookCarrier = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 0.4, 0.2), // Size of the hook carrier
+    new THREE.BoxGeometry(1, 0.4, 0.2),
     new THREE.MeshStandardMaterial({ color: 0xff0000 })
   );
-
-  hookCarrier.position.set(5, CRANE_HEIGHT + 6, 0); // X, Y, Z position relative to the crane group's origin
+  hookCarrier.position.set(5, CRANE_HEIGHT + 6, 0);
   hookCarrier.castShadow = true;
   craneGroup.add(hookCarrier);
 
-  // The hook itself
   hook = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.4, 0.4), // Size of the hook
+    new THREE.BoxGeometry(0.4, 0.4, 0.4),
     new THREE.MeshStandardMaterial({ color: 0x000000 })
   );
-  const ropeHeight = 0.2; // Reduced height of the rope/wire for the hook
+  const ropeHeight = 0.2;
   hook.position.set(
     hookCarrier.position.x,
     hookCarrier.position.y - ropeHeight,
     hookCarrier.position.z
-  ); // Set hook position relative to hook carrier
+  );
   hook.castShadow = true;
   craneGroup.add(hook);
 
-  const wireMaterial = new THREE.LineBasicMaterial({ color: "#e7e7dcff" }); // Color of the wire
+  const wireMaterial = new THREE.LineBasicMaterial({ color: "#e7e7dcff" });
   const wireGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(
-      hookCarrier.position.x,
-      hookCarrier.position.y,
-      hookCarrier.position.z
-    ), // Start point of the wire (at hook carrier)
-    new THREE.Vector3(hook.position.x, hook.position.y, hook.position.z), // End point of the wire (at hook)
+    new THREE.Vector3(hookCarrier.position.x, hookCarrier.position.y, hookCarrier.position.z),
+    new THREE.Vector3(hook.position.x, hook.position.y, hook.position.z),
   ]);
   wire = new THREE.Line(wireGeometry, wireMaterial);
   craneGroup.add(wire);
 
-  console.log("Crane initialized. - main.js:445");
+  console.log("Crane initialized. - main.js:371");
 }
 
 function updateWire() {
   if (hookCarrier && hook && wire) {
     const points = [
-      new THREE.Vector3(
-        hookCarrier.position.x,
-        hookCarrier.position.y,
-        hookCarrier.position.z
-      ),
+      new THREE.Vector3(hookCarrier.position.x, hookCarrier.position.y, hookCarrier.position.z),
       new THREE.Vector3(hook.position.x, hook.position.y, hook.position.z),
     ];
     wire.geometry.setFromPoints(points);
@@ -461,109 +383,71 @@ function updateWire() {
 
 function animateCraneDrop(coil, targetX, targetZ, targetY) {
   if (!hookCarrier || !hook) {
-    console.error(
-      "Crane parts not initialized for drop animation."
-    );
+    console.error("Crane parts not initialized for drop animation. - main.js:386");
     return;
   }
 
-  const pullingMachineHeight = CRANE_HEIGHT + 5.4;
-  const ropeHeight = 0.2;
-
-  hookCarrier.position.set(targetX, pullingMachineHeight, targetZ);
-
-  hook.position.set(
-    hookCarrier.position.x,
-    hookCarrier.position.y - ropeHeight,
-    hookCarrier.position.z
-  );
-
-  coil.position.set(hook.position.x, hook.position.y - 0.3, hook.position.z);
-
+  // 🎯 1. Instantly position hook above target (no sideways movement)
+  hookCarrier.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
+  hook.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
   updateWire();
 
-  const dropY = FLOOR_Y + 0.0;
+  // 🎯 2. Start the coil up high above the target
+  coil.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
 
-  gsap.to(hookCarrier.position, {
-    x: targetX,
-    z: targetZ,
-    duration: 2,
-    ease: "power1.inOut",
+  // 🎯 3. Slowly lower the coil (like a crane pulling it down)
+  gsap.to(coil.position, {
+    y: targetY,
+    duration: 4,         // ⏳ longer duration = slow motion
+    ease: "power1.inOut", // smooth start & stop, no bounce
     onUpdate: () => {
+      hook.position.y = coil.position.y + 0.3; // keeps hook connected
       updateWire();
-      hook.position.x = hookCarrier.position.x;
-      hook.position.z = hookCarrier.position.z;
-      coil.position.x = hook.position.x;
-      coil.position.z = hook.position.z;
     },
+    onComplete: () => {
+      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:408`);
+    }
   });
 
+  // 🎯 4. Optional: hook moves back up after lowering
   gsap.to(hook.position, {
-    y: targetY + 0.3,
+    y: CRANE_HEIGHT + 6,
     duration: 2,
-    delay: 2,
+    delay: 4,
     ease: "power1.inOut",
-    onUpdate: () => {
-      updateWire();
-
-      coil.position.set(
-        hook.position.x,
-        hook.position.y - 0.3,
-        hook.position.z
-      );
-    },
-  });
-
-  gsap.delayedCall(4.2, () => {
-    updateWire();
-    gsap.to(hookCarrier.position, {
-      y: hookCarrier.position.y + 3,
-      duration: 1,
-      ease: "power1.inOut",
-      onUpdate: () => {
-        hook.position.y = hookCarrier.position.y;
-        updateWire();
-      },
-      onComplete: () => {
-        console.log(
-          `Coil ${coil.userData.id} dropped at (${targetX.toFixed(
-            2
-          )}, ${FLOOR_Y}, ${targetZ.toFixed(2)}).`
-        );
-      },
-    });
+    onUpdate: updateWire,
   });
 }
 
-let craneGUIFolder;
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
 
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn(
-      "dat.GUI not found. Crane GUI controls will not be available."
-    );
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:430");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error(
-      "GUI container not found. Please add a div with id='guicontainer' to your extension's HTML."
-    );
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:436");
     return;
   }
 
   const gui = new GUI({ autoPlace: false });
   guiContainer.appendChild(gui.domElement);
 
-  craneGUIFolder = gui.addFolder("Crane Controls");
+  const craneGUIFolder = gui.addFolder("Crane Controls");
 
   const craneControls = {
     pickedCoilIndex: 0,
     boomRotationZ: 0,
     pickupCoil: function () {
       if (allCoils.length === 0) {
-        alert("No coils available to pick up.");
+        alertUser("No coils available to pick up.");
         return;
       }
       const maxIndex = Math.max(0, allCoils.length - 1);
@@ -587,6 +471,7 @@ function setupCraneGUI() {
     },
     rotateBoom: function () {
       craneGroup.rotation.y = this.boomRotationZ;
+
       const boomPivotOffset = new THREE.Vector3(0, CRANE_HEIGHT + 6, 0);
       const distanceAlongBoom = 5;
 
@@ -617,18 +502,25 @@ function setupCraneGUI() {
       const maxIndex = Math.max(0, allCoils.length - 1);
       craneControls.pickedCoilIndex = Math.min(Math.max(0, value), maxIndex);
     });
+
   craneGUIFolder
     .add(craneControls, "boomRotationZ", -Math.PI / 2, Math.PI / 2)
     .name("Boom Rotation (XZ)")
     .step(0.01)
     .onChange(craneControls.rotateBoom);
+
   craneGUIFolder.add(craneControls, "pickupCoil").name("Pick & Drop Coil");
+
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:628");
+  console.log("Crane GUI setup complete. - main.js:516");
 }
 
 document.getElementById("addAssetButton").disabled = true;
 document.getElementById("searchButton").disabled = true;
 
+updateLoadingScreen(true);
+
 animate();
+
+setupCraneGUI();
