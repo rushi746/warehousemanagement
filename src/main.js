@@ -222,7 +222,7 @@ loader.load("/steelcoil.glb", (gltf) => {
   console.log("Coil model template loaded with enhanced materials. - main.js:222");
 });
 
-function placeCoilAt(row, column, layer) {
+function placeCoilAt(row, column, layer, coilId = null) {
   if (!coilModelTemplate) {
     alertUser("Coil model template is not loaded yet. Please wait.");
     return;
@@ -261,7 +261,9 @@ function placeCoilAt(row, column, layer) {
     }
   });
 
-  newCoil.userData.id = totalCoilCount + 1;
+  // 👉 Assign coil ID from backend or auto-generate if not provided
+  newCoil.userData.id = coilId ?? (totalCoilCount + 1);
+
   allCoils.push(newCoil);
   scene.add(newCoil);
 
@@ -273,6 +275,7 @@ function placeCoilAt(row, column, layer) {
     `✅ Coil #${newCoil.userData.id} placed at Row: ${row}, Column: ${column}, Layer: ${layer}`
   );
 }
+
 
 function addCoilWithCrane() {
   if (!coilModelTemplate) {
@@ -371,8 +374,8 @@ async function pollAndHandle() {
 
   if (coilData) {
     showCoilRequestPrompt(
-      () => placeCoilAt(coilData.row, coilData.column, coilData.layer),
-      () => console.log("❌ Coil placement rejected. - main.js:375")
+      () => placeCoilAt(coilData.row, coilData.column, coilData.layer, coilData.id),
+      () => console.log("❌ Coil placement rejected. - main.js:378")
     );
   }
 }
@@ -381,7 +384,7 @@ async function pollAndHandle() {
 
 function startPollingForNewCoils() {
   if (isPollingActive) {
-    console.log("Polling is already active. - main.js:384");
+    console.log("Polling is already active. - main.js:387");
     return;
   }
   isPollingActive = true;
@@ -401,7 +404,7 @@ function stopPollingForNewCoils() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  console.log("Polling for new coils has been stopped. - main.js:404");
+  console.log("Polling for new coils has been stopped. - main.js:407");
 }
 
 function moveCameraTo(targetObject) {
@@ -475,7 +478,7 @@ function findAndHighlightCoil() {
 
 function initializeCrane() {
   if (!coilModelTemplate) {
-    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:478");
+    console.error("Crane cannot be initialized: Coil model not loaded yet. - main.js:481");
     return;
   }
 
@@ -541,7 +544,7 @@ function initializeCrane() {
   wire = new THREE.Line(wireGeometry, wireMaterial);
   craneGroup.add(wire);
 
-  console.log("Crane initialized with enhanced materials. - main.js:544");
+  console.log("Crane initialized with enhanced materials. - main.js:547");
 }
 
 function updateWire() {
@@ -556,7 +559,7 @@ function updateWire() {
 
 function animateCraneDrop(coil, targetX, targetZ, targetY) {
   if (!hookCarrier || !hook) {
-    console.error("Crane parts not initialized for drop animation. - main.js:559");
+    console.error("Crane parts not initialized for drop animation. - main.js:562");
     return;
   }
 
@@ -575,7 +578,7 @@ function animateCraneDrop(coil, targetX, targetZ, targetY) {
       updateWire();
     },
     onComplete: () => {
-      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:578`);
+      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:581`);
     }
   });
 
@@ -648,13 +651,13 @@ function animate() {
 
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:651");
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:654");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:657");
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:660");
     return;
   }
 
@@ -734,7 +737,7 @@ function setupCraneGUI() {
 
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:737");
+  console.log("Crane GUI setup complete. - main.js:740");
 }
 
 // Handle window resize

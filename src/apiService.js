@@ -10,18 +10,19 @@ export async function checkForNewCoil() {
 
     const data = await response.json();
 
-    // ✅ if there is a new coil return full object
+    // ✅ If a new coil is available, return its full details including the 4-digit ID
     if (data.newCoil) {
       return {
+        id: data.id,           // 👈 Include the 4-digit coil ID
         row: data.row,
         column: data.column,
         layer: data.layer
       };
     }
 
-    return null; // ✅ no new coil
+    return null; // ❌ No new coil available
   } catch (error) {
-    console.error("❌ Failed to connect to API - apiService.js:24", error);
+    console.error("❌ Failed to connect to API - apiService.js:25", error);
     return null;
   }
 }
