@@ -570,17 +570,28 @@ function animateCraneDrop(coil, targetX, targetZ, targetY) {
   coil.position.set(targetX, CRANE_HEIGHT + 6, targetZ);
 
   gsap.to(coil.position, {
-    y: targetY,
-    duration: 4,       
-    ease: "power1.inOut", 
-    onUpdate: () => {
-      hook.position.y = coil.position.y + 0.3; 
-      updateWire();
-    },
-    onComplete: () => {
-      console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:581`);
+  y: targetY,
+  duration: 4,       
+  ease: "power1.inOut", 
+  onStart: () => {
+    currentlyBlinkingCoil = coil; // Track this coil temporarily
+  },
+  onUpdate: () => {
+    hook.position.y = coil.position.y + 0.3; 
+    updateWire();
+    updateCoilLabelPosition(coil); // Show label during movement
+  },
+  onComplete: () => {
+    console.log(`✅ Coil ${coil.userData.id} gently lowered. - main.js:585`);
+    
+    // ❌ Hide label and stop tracking
+    if (currentlyBlinkingCoil === coil) {
+      coilIdLabel.style.display = "none";
+      currentlyBlinkingCoil = null;
     }
-  });
+  }
+});
+
 
   gsap.to(hook.position, {
     y: CRANE_HEIGHT + 6,
@@ -651,13 +662,13 @@ function animate() {
 
 function setupCraneGUI() {
   if (typeof GUI === "undefined") {
-    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:654");
+    console.warn("dat.GUI not found. Crane GUI controls will not be available. - main.js:665");
     return;
   }
 
   const guiContainer = document.getElementById("gui-container");
   if (!guiContainer) {
-    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:660");
+    console.error("GUI container not found. Please add a div with id='guicontainer' to your HTML. - main.js:671");
     return;
   }
 
@@ -737,7 +748,7 @@ function setupCraneGUI() {
 
   craneGUIFolder.open();
 
-  console.log("Crane GUI setup complete. - main.js:740");
+  console.log("Crane GUI setup complete. - main.js:751");
 }
 
 // Handle window resize
